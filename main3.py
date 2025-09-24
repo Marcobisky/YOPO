@@ -3,6 +3,49 @@ import numpy as np
 import os
 from glob import glob
 
+
+def _extract_patch(Image, bbox):
+    x, y, w, h = bbox
+    Patch = CurrentKernel(Image.image_content_GRB[y:y+h, x:x+w], bbox)
+    return Patch
+
+
+def _ncc_score(Current_Image, Current_Kernel):
+    ## Evaluate the matching score between current image and kernel
+    # Extract image patch
+    Patch_Image = _extract_patch(Current_Image, Current_Kernel.bbox)
+    # Convert to gray
+    patch_gray = Patch_Image.to_gray()
+    kernel_gray = Current_Kernel.to_gray()
+    # Use cv2.matchTemplate
+    result = cv2.matchTemplate(patch_gray, kernel_gray, cv2.TM_CCOEFF_NORMED)
+    # Return the maximum value and position
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+    return max_val, max_loc
+
+
+
+def _compute_color_hist(Image, mask=None):
+    # 使用 HSV 色彩直方图
+    img = Image.image_content_GRB
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    # 只取 H 和 S 通道
+    h_bins = 30
+    s_bins = 32
+    hist = cv2.calcHist([hsv], [0,1], mask, [h_bins, s_bins], [0,180, 0,256])
+    cv2.normalize(hist, hist)
+    return hist
+
+def _is_color_similar(Image, Kernel_Image, Config):
+    ## Evaluate the color similarity between two images
+    # Extract image patch
+    Patch_Image = _extract_patch(Image, Kernel_Image.bbox)
+    hist1 = _compute_color_hist(Patch_Image)
+    hist2 = _compute_color_hist(Kernel_Image)
+    similarity = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
+    return (similarity >= Config.color_threshold)
+
+
 class CurrentImage:
     # The current focused image
     def __init__(self, image_content_GRB):
@@ -74,10 +117,6 @@ class Config:
         self.color_threshold = color_threshold
         self.alpha = alpha
 
-def _extract_patch(Image, bbox):
-    x, y, w, h = bbox
-    Patch = CurrentKernel(Image.image_content_GRB[y:y+h, x:x+w], bbox)
-    return Patch
 
 def initialize_tracker(image_folder, init_bbox, Config):
     img_paths = sorted(glob(os.path.join(image_folder, "cars_*.jpg")))
@@ -97,45 +136,6 @@ def initialize_tracker(image_folder, init_bbox, Config):
     return First_Kernel, Kernel_Buffer, img_paths
 
 
-def visualization(...):
-    ...
-
-
-def _ncc_score(Current_Image, Current_Kernel):
-    ## Evaluate the matching score between current image and kernel
-    # Extract image patch
-    Patch_Image = _extract_patch(Current_Image, Current_Kernel.bbox)
-    # Convert to gray
-    patch_gray = Patch_Image.to_gray()
-    kernel_gray = Current_Kernel.to_gray()
-    # Use cv2.matchTemplate
-    result = cv2.matchTemplate(patch_gray, kernel_gray, cv2.TM_CCOEFF_NORMED)
-    # Return the maximum value and position
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-    return max_val, max_loc
-
-
-
-def _compute_color_hist(Image, mask=None):
-    # 使用 HSV 色彩直方图
-    img = Image.image_content_GRB
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    # 只取 H 和 S 通道
-    h_bins = 30
-    s_bins = 32
-    hist = cv2.calcHist([hsv], [0,1], mask, [h_bins, s_bins], [0,180, 0,256])
-    cv2.normalize(hist, hist)
-    return hist
-
-def _is_color_similar(Image, Kernel_Image, Config):
-    ## Evaluate the color similarity between two images
-    # Extract image patch
-    Patch_Image = _extract_patch(Image, Kernel_Image.bbox)
-    hist1 = _compute_color_hist(Patch_Image)
-    hist2 = _compute_color_hist(Kernel_Image)
-    similarity = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
-    return (similarity >= Config.color_threshold)
-
 def get_next_kernel(Current_Image, Kernel_Buffer, Config):
     ## Get the next kernel based on traverse matching
     for Kernel_Test in Kernel_Buffer.get_cloud():        
@@ -150,6 +150,9 @@ def get_next_kernel(Current_Image, Kernel_Buffer, Config):
             ...
         
         return Best_Next_Kernel
+
+def visualization(...):
+    ...
 
 
 if __name__ == "__main__":
