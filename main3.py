@@ -55,7 +55,8 @@ class CurrentImage:
         return cv2.cvtColor(self.image_content_GRB, cv2.COLOR_BGR2GRAY)
     
     def get_size(self):
-
+        h, w = self.image_content_GRB.shape[:2]
+        return (w, h)
 
 class CurrentKernel(CurrentImage):
     # The current kernel image used for pattern matching
@@ -71,13 +72,22 @@ class KernelBuffer:
     def __init__(self, Config):
         self.buffer = []
         self.config = Config
-        self.best_score = -1
+        self.vx_avg = 0
+        self.vy_avg = 0
 
-    def create_genesis_kernel(self, Genesis_Kernel):
-        self.genesis_kernel = Genesis_Kernel
+    # def create_genesis_kernel(self, Genesis_Kernel):
+    #     self.genesis_kernel = Genesis_Kernel
         
     def add_kernel(self, Current_Kernel):
+        # First compute and update moving average velocity
+        v_x_new = Current_Kernel.bbox[0] - self.buffer[-1].bbox[0] if len(self.buffer) > 0 else 0
+        v_y_new = Current_Kernel.bbox[1] - self.buffer[-1].bbox[1] if len(self.buffer) > 0 else 0
+        self.vx_avg = self.config.weight * v_x_new + (1 - self.config.weight) * self.vx_avg
+        self.vy_avg = self.config.weight * v_y_new + (1 - self.config.weight) * self.vy_avg
+        # Append the current kernel to the buffer
         self.buffer.append(Current_Kernel)
+        
+        
     
     def update_best_kernel(self, Best_Kernel):
         self.best_kernel = Best_Kernel
@@ -86,28 +96,45 @@ class KernelBuffer:
         x_c, y_c = self._predict_cloud_center()
         # Define the searching space ("cloud") around the predicted kernel
         Cloud = []
-        ...
-        for delta_x in range(..., ..., self.config.step_size):
-            for delta_y in range(..., ..., self.config.step_size):
-                for sc in range(..., ..., self.config.step_size_scale):
+        for x in range(int(x_c-self.config.pad_pixels), int(x_c+self.config.pad_pixels), int(self.config.step_size_pixels)):
+            for y in range(int(y_c-self.config.pad_pixels), int(y_c+self.config.pad_pixels), int(self.config.step_size_pixels)):
+                for sc in np.arange(self.best_kernel.scale-self.config.pad_scale, self.best_kernel.scale+self.config.pad_scale, self.config.step_size_scale):
                     # Compute stretched best kernel
-                    Stretched_Kernel = cv2.resize(...)
-                    # Compute bbox
-                    x = x_c + delta_x
-                    y = y_c + delta_y
-                    w, h = Stretched_Kernel.get_size()
-                    New_Kernel = CurrentKernel(Stretched_Kernel, (x, y, w, h), sc)
+                    stretched_kernel = cv2.resize(self.best_kernel.image_content_GRB, None, fx=sc, fy=sc, interpolation=cv2.INTER_CUBIC)
+                    w, h = stretched_kernel.shape[1], stretched_kernel.shape[0]
+                    New_Kernel = CurrentKernel(stretched_kernel, (x, y, w, h), sc)
                     Cloud.append(New_Kernel)
         return Cloud
         
     def _predict_cloud_center(self):
-        # Predict the next most likely kernel ("cloud center") based on historical kernels
-        ...
+        ## Predict the next most likely kernel ("cloud center") based on historical kernels
+        x_c = self.buffer[-1].bbox[0] + self.vx_avg
+        y_c = self.buffer[-1].bbox[1] + self.vy_avg
         return (x_c, y_c)
+
+    # def _get_velocity(self):
+    #     # Extract all x, y positions from historical kernels
+    #     _x = [kernel.bbox[0] for kernel in self.buffer]
+    #     _y = [kernel.bbox[1] for kernel in self.buffer]
+    #     # Compute adjacent differences
+    #     v_x = np.diff(_x)
+    #     v_y = np.diff(_y)
+    #     return v_x, v_y
+    
+    # def _moving_avg(self, data):
+    #     # Compute the last length_for_prediction elements moving average
+    #     denominator = sum([self.config.weight**i for i in range(self.config.length_for_prediction)])
+    #     data_avg = 0
+    #     for i in range(1, len(data)):
+    #         if i < self.config.length_for_prediction:
+    #             data_avg += self.config.weight**i * data[-i]
+    #         else:
+    #             break
+    #     return data_avg / denominator
 
 class Config:
     # Configuration for prediction
-    def __init__(self, length_for_prediction, pad_pixels, step_size_pixels, pad_scale, step_size_scale, ncc_threshold, color_threshold, alpha):
+    def __init__(self, length_for_prediction, pad_pixels, step_size_pixels, pad_scale, step_size_scale, ncc_threshold, color_threshold, weight):
         self.length_for_prediction = length_for_prediction
         self.pad_pixels = pad_pixels
         self.step_size_pixels = step_size_pixels
@@ -115,7 +142,7 @@ class Config:
         self.step_size_scale = step_size_scale
         self.ncc_threshold = ncc_threshold
         self.color_threshold = color_threshold
-        self.alpha = alpha
+        self.weight = weight # Moving average weight
 
 
 def initialize_tracker(image_folder, init_bbox, Config):
@@ -129,14 +156,17 @@ def initialize_tracker(image_folder, init_bbox, Config):
     
     ## Initialize KernelBuffer
     Kernel_Buffer = KernelBuffer(Config)
-    Kernel_Buffer.create_genesis_kernel(First_Kernel)
+    # Kernel_Buffer.create_genesis_kernel(First_Kernel)
+    Kernel_Buffer.add_kernel(First_Kernel)
     Kernel_Buffer.update_best_kernel(First_Kernel)
 
     ## Return the initialized entities
     return First_Kernel, Kernel_Buffer, img_paths
 
 
-def get_next_kernel(Current_Image, Kernel_Buffer, Config):
+def update_next_kernel(Current_Image, Kernel_Buffer, Config):
+    Best_Next_Kernel = Kernel_Buffer.best_kernel
+    best_score = -1
     ## Get the next kernel based on traverse matching
     for Kernel_Test in Kernel_Buffer.get_cloud():        
         # Use color histogram similarity as a preliminary filter
@@ -145,19 +175,53 @@ def get_next_kernel(Current_Image, Kernel_Buffer, Config):
         
         # Check NCC Matching
         score, _ = _ncc_score(Current_Image, Kernel_Test)
-        if score > Kernel_Buffer.best_score:
-            Kernel_Buffer.best_score = score
-            ...
+        if score > best_score:
+            best_score = score
+            Best_Next_Kernel = Kernel_Test
         
-        return Best_Next_Kernel
+    Kernel_Buffer.add_kernel(Best_Next_Kernel)
+        
+    # Whether to update the best kernel
+    if best_score > Config.ncc_threshold:
+        Kernel_Buffer.update_best_kernel(Best_Next_Kernel)
+    
+    return Best_Next_Kernel, best_score
 
-def visualization(...):
-    ...
+def visualization(Current_Image, Best_Kernel, score):
+    frame = Current_Image.image_content_GRB.copy()
+    
+    # 获取边框信息
+    x, y, w, h = Best_Kernel.bbox
+    
+    # 在图像上画边框
+    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    
+    # 添加得分文本
+    cv2.putText(frame, f"{score:.2f}", (x, y - 5),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    
+    # 显示图像
+    cv2.imshow("Tracking", frame)
+    
+    # 检查退出键
+    key = cv2.waitKey(1)
+    if key == ord('q'):
+        cv2.destroyAllWindows()
+        return True  # 返回True表示需要退出
+    
+    return False
 
 
 if __name__ == "__main__":
     ## Define hyperparameters
-    CONFIG = Config(5, 50, 5, 1.2, 0.05)
+    CONFIG = Config(length_for_prediction=5, 
+                    pad_pixels=7, 
+                    step_size_pixels=1, 
+                    pad_scale=0.1, 
+                    step_size_scale=0.01, 
+                    ncc_threshold=0.8, 
+                    color_threshold=0.7,
+                    weight=0.8)
     
     ## Initialize the tracker for blue car sequence
     Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/blue", (677, 257, 163, 132), CONFIG)
@@ -167,11 +231,14 @@ if __name__ == "__main__":
         ## Get the current image
         Current_Image = CurrentImage(cv2.imread(current_img_path))
         
-        ## Explore and update the next best kernel
-        Current_Kernel = get_next_kernel(Current_Image, Current_Kernel, CONFIG)
-        # Add the current kernel to buffer
-        Kernel_Buffer.add_kernel(Current_Kernel)
+        ## update the next best kernel
+        Best_Next_Kernel, best_score = update_next_kernel(Current_Image, Kernel_Buffer, CONFIG)
 
         ## Visualization
-        visualization(...)
+        should_exit = visualization(Current_Image, Best_Next_Kernel, best_score)
+        if should_exit:
+            break
+    
+    # 清理窗口
+    cv2.destroyAllWindows()
         
