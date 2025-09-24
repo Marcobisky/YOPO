@@ -74,9 +74,6 @@ class KernelBuffer:
         self.config = Config
         self.vx_avg = 0
         self.vy_avg = 0
-
-    # def create_genesis_kernel(self, Genesis_Kernel):
-    #     self.genesis_kernel = Genesis_Kernel
         
     def add_kernel(self, Current_Kernel):
         # First compute and update moving average velocity
@@ -112,26 +109,6 @@ class KernelBuffer:
         x_c = self.buffer[-1].bbox[0] + self.vx_avg
         y_c = self.buffer[-1].bbox[1] + self.vy_avg
         return (x_c, y_c)
-
-    # def _get_velocity(self):
-    #     # Extract all x, y positions from historical kernels
-    #     _x = [kernel.bbox[0] for kernel in self.buffer]
-    #     _y = [kernel.bbox[1] for kernel in self.buffer]
-    #     # Compute adjacent differences
-    #     v_x = np.diff(_x)
-    #     v_y = np.diff(_y)
-    #     return v_x, v_y
-    
-    # def _moving_avg(self, data):
-    #     # Compute the last length_for_prediction elements moving average
-    #     denominator = sum([self.config.weight**i for i in range(self.config.length_for_prediction)])
-    #     data_avg = 0
-    #     for i in range(1, len(data)):
-    #         if i < self.config.length_for_prediction:
-    #             data_avg += self.config.weight**i * data[-i]
-    #         else:
-    #             break
-    #     return data_avg / denominator
 
 class Config:
     # Configuration for prediction
