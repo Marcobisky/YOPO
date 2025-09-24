@@ -82,8 +82,9 @@ class KernelBuffer:
         # First compute and update moving average velocity
         v_x_new = Current_Kernel.bbox[0] - self.buffer[-1].bbox[0] if len(self.buffer) > 0 else 0
         v_y_new = Current_Kernel.bbox[1] - self.buffer[-1].bbox[1] if len(self.buffer) > 0 else 0
-        self.vx_avg = self.config.weight * v_x_new + (1 - self.config.weight) * self.vx_avg
-        self.vy_avg = self.config.weight * v_y_new + (1 - self.config.weight) * self.vy_avg
+        w = self.config.weight
+        self.vx_avg = w * v_x_new + (1 - w) * self.vx_avg
+        self.vy_avg = w * v_y_new + (1 - w) * self.vy_avg
         # Append the current kernel to the buffer
         self.buffer.append(Current_Kernel)
         
@@ -177,7 +178,7 @@ def update_next_kernel(Current_Image, Kernel_Buffer, Config):
         score, _ = _ncc_score(Current_Image, Kernel_Test)
         if score > best_score:
             best_score = score
-            Best_Next_Kernel = Kernel_Test
+            Best_Next_Kernel = _extract_patch(Current_Image, Kernel_Test.bbox)
         
     Kernel_Buffer.add_kernel(Best_Next_Kernel)
         
@@ -216,14 +217,14 @@ def visualization(Current_Image, Best_Kernel, score):
 
 if __name__ == "__main__":
     ## Define hyperparameters
-    CONFIG = Config(length_for_prediction=4, 
-                    pad_pixels=6, 
-                    step_size_pixels=2, 
-                    pad_scale=0.03, 
-                    step_size_scale=0.01, 
-                    ncc_threshold=0.65, 
-                    color_threshold=0.6,
-                    weight=0.8)
+    CONFIG = Config(length_for_prediction=8, 
+                    pad_pixels=3, 
+                    step_size_pixels=1, 
+                    pad_scale=0.004, 
+                    step_size_scale=0.002, 
+                    ncc_threshold=0.95, 
+                    color_threshold=0.8,
+                    weight=0.2)
     
     ## Initialize the tracker for blue car sequence
     Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/blue", (672, 255, 168, 132), CONFIG)
