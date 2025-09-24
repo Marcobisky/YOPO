@@ -125,6 +125,7 @@ class Config:
 
 def initialize_tracker(image_folder, init_bbox, Config):
     img_paths = sorted(glob(os.path.join(image_folder, "cars_*.jpg")))
+    img_paths = [p for p in img_paths if int(os.path.basename(p).split('_')[1].split('.')[0]) >= init_frame_idx]
     
     ## Create the first CurrentImage
     First_Img = CurrentImage(cv2.imread(img_paths[0]))
