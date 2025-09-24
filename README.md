@@ -1,23 +1,26 @@
-# Digital Image Processing Lab1
+# YOPO -- You Only Pick Once
 
-## 环境设置
+> This is the source code for the first project of DIP (Digital Image Processing) course in UESTC, UofG.
 
-创建并激活conda环境：
+## Environment Setup
+
+Create and activate the conda environment:
 ```bash
 conda env create -f environment.yml
 conda activate image-processing-lab1
 ```
 
-## 运行
+## Run
 
 ```bash
-cd code
 python main.py
 ```
 
-## 说明
+## Some Notes
 
-变量规范:
+### Code Structure
+
+### 变量规范:
 
 - 类名: 开头大写驼峰
 - 类中 utility 性质的方法 (函数): 下划线开头

@@ -1,4 +1,4 @@
-name: image-processing-lab1
+name: yopo
 channels:
   - conda-forge
   - defaults
