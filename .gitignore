@@ -1,4 +1,4 @@
 *.txt
 .DS_Store
 __pycache__
-*.py
+main_backup.py
