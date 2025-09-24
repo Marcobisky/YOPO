@@ -226,14 +226,45 @@ if __name__ == "__main__":
                     color_threshold=0.8,
                     weight=0.2)
     
-    ## Initialize the tracker for blue car sequence
-    Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/blue", (672, 255, 168, 132), CONFIG)
+    # ## Initialize the tracker for blue car sequence
+    # Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/blue", (672, 255, 168, 132), CONFIG)
 
-    # Start reading images and match searching
-    for current_img_path in img_paths[1:]:
+    # # Start reading images and match searching
+    # for current_img_path in img_paths[1:]:
+    #     ## Get the current image
+    #     Current_Image = CurrentImage(cv2.imread(current_img_path))
         
-        if os.path.basename(current_img_path) == "cars_1290.jpg":
-            print("test")
+    #     ## update the next best kernel
+    #     Best_Next_Kernel, best_score = update_next_kernel(Current_Image, Kernel_Buffer, CONFIG)
+        
+    #     ## Print messages
+    #     print(f"Processing {os.path.basename(current_img_path)}: Best Score = {best_score:.4f}")
+        
+    #     ## Visualization
+    #     should_exit = visualization(Current_Image, Best_Next_Kernel, best_score)
+    #     if should_exit:
+    #         break
+    
+    # # 清理窗口
+    # cv2.destroyAllWindows()
+        
+        
+        
+        
+    ## Define hyperparameters
+    CONFIG = Config(length_for_prediction=8, 
+                    pad_pixels=3, 
+                    step_size_pixels=1, 
+                    pad_scale=0.004, 
+                    step_size_scale=0.002, 
+                    ncc_threshold=0.97, 
+                    color_threshold=0.8,
+                    weight=0.8) 
+    ## Initialize the tracker for red car sequence
+    Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/red", (796, 266, 196, 151), CONFIG)
+    
+   # Start reading images and match searching
+    for current_img_path in img_paths[1:]:
         ## Get the current image
         Current_Image = CurrentImage(cv2.imread(current_img_path))
         
@@ -243,12 +274,10 @@ if __name__ == "__main__":
         ## Print messages
         print(f"Processing {os.path.basename(current_img_path)}: Best Score = {best_score:.4f}")
         
-        
         ## Visualization
         should_exit = visualization(Current_Image, Best_Next_Kernel, best_score)
         if should_exit:
             break
     
     # 清理窗口
-    cv2.destroyAllWindows()
-        
+    cv2.destroyAllWindows() 
