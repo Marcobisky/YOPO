@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+from PIL import Image
+import io
 
 
 def _extract_patch(Image, bbox):
@@ -180,6 +182,60 @@ class TrackingLogger:
         print(f"Log saved to {self.log_filename}")
 
 
+class GifGenerator:
+    # Generator for creating GIF animations from visualization frames
+    def __init__(self, output_folder="gifs"):
+        self.output_folder = output_folder
+        self.tracking_frames = []
+        self.search_space_frames = []
+        os.makedirs(output_folder, exist_ok=True)
+    
+    def add_tracking_frame(self, frame):
+        # Add tracking visualization frame
+        self.tracking_frames.append(frame.copy())
+    
+    def add_search_space_frame(self, fig):
+        # Convert matplotlib figure to PIL Image and add to frames
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=100, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
+        buf.seek(0)
+        img = Image.open(buf)
+        self.search_space_frames.append(img.copy())
+        buf.close()
+    
+    def save_gifs(self, sequence_type="blue", duration=100):
+        # Save tracking GIF
+        if self.tracking_frames:
+            tracking_images = []
+            for frame in self.tracking_frames:
+                # Convert BGR to RGB for PIL
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                tracking_images.append(Image.fromarray(rgb_frame))
+            
+            tracking_gif_path = os.path.join(self.output_folder, f"tracking_{sequence_type}.gif")
+            tracking_images[0].save(
+                tracking_gif_path,
+                save_all=True,
+                append_images=tracking_images[1:],
+                duration=duration,  # milliseconds per frame
+                loop=0
+            )
+            print(f"Tracking GIF saved: {tracking_gif_path}")
+        
+        # Save search space GIF
+        if self.search_space_frames:
+            search_gif_path = os.path.join(self.output_folder, f"search_space_{sequence_type}.gif")
+            self.search_space_frames[0].save(
+                search_gif_path,
+                save_all=True,
+                append_images=self.search_space_frames[1:],
+                duration=duration,  # milliseconds per frame
+                loop=0
+            )
+            print(f"Search space GIF saved: {search_gif_path}")
+
+
 class SearchSpaceVisualizer:
     # Visualizer for 2D search space at best kernel scale
     def __init__(self, config, title="Search Space Visualization"):
@@ -319,6 +375,9 @@ class SearchSpaceVisualizer:
         # Update display
         plt.pause(0.001)
         plt.draw()
+        
+        # Return figure for GIF generation
+        return self.fig
 
 
 def initialize_tracker(image_folder, init_bbox, Config):
@@ -407,13 +466,14 @@ def visualization(Current_Image, Best_Kernel, score, trajectory_points=None):
     key = cv2.waitKey(1)
     if key == ord('q'):
         cv2.destroyAllWindows()
-        return True  # True for exit
+        return True, frame  # True for exit, return current frame
     
-    return False
+    return False, frame  # False for continue, return current frame
 
 
 if __name__ == "__main__":
     
+    # ---------------------blue car sequence---------------------
     ## Define hyperparameters
     CONFIG = Config(length_for_prediction=8, 
                     pad_pixels=3, 
@@ -433,6 +493,9 @@ if __name__ == "__main__":
     # Initialize search space visualizer
     visualizer = SearchSpaceVisualizer(CONFIG, "Blue Car Tracking - Search Space")
     
+    # Initialize GIF generator
+    gif_generator = GifGenerator()
+    
     # Initialize trajectory tracking
     trajectory_points = []
     # Add initial point from first kernel
@@ -448,8 +511,8 @@ if __name__ == "__main__":
         Best_Next_Kernel, best_score = update_next_kernel(Current_Image, Kernel_Buffer, CONFIG)
         
         ## Update search space visualization with frame information
-        visualizer.update_search_space(Current_Image, Kernel_Buffer, Best_Next_Kernel, best_score, 
-                                     os.path.basename(current_img_path))
+        search_fig = visualizer.update_search_space(Current_Image, Kernel_Buffer, Best_Next_Kernel, best_score, 
+                                                   os.path.basename(current_img_path))
         
         ## Update trajectory with bounding box center
         x, y, w, h = Best_Next_Kernel.bbox
@@ -462,13 +525,22 @@ if __name__ == "__main__":
         ## Print messages
         print(f"Processing {os.path.basename(current_img_path)}: Best Score = {best_score:.4f}")
         
-        ## Visualization with trajectory (OpenCV window)
-        should_exit = visualization(Current_Image, Best_Next_Kernel, best_score, trajectory_points)
+        ## Visualization with trajectory (OpenCV window) and collect frame for GIF
+        should_exit, tracking_frame = visualization(Current_Image, Best_Next_Kernel, best_score, trajectory_points)
+        
+        ## Add frames to GIF generator
+        gif_generator.add_tracking_frame(tracking_frame)
+        gif_generator.add_search_space_frame(search_fig)
+        
         if should_exit:
             break
     
     # Save log before exiting
     logger.save_log()
+    
+    # Generate GIF animations (fast playback: 50ms per frame)
+    print("Generating GIF animations...")
+    gif_generator.save_gifs(sequence_type="blue", duration=50)
     
     # Clear windows
     cv2.destroyAllWindows()
@@ -476,65 +548,77 @@ if __name__ == "__main__":
         
         
         
-        
-    # ## Define hyperparameters
-    # CONFIG = Config(length_for_prediction=8, 
-    #                 pad_pixels=3, 
-    #                 step_size_pixels=1, 
-    #                 pad_scale=0.004, 
-    #                 step_size_scale=0.002, 
-    #                 ncc_threshold=0.97, 
-    #                 color_threshold=0.8,
-    #                 weight=0.8) 
-    # ## Initialize the tracker for red car sequence
-    # Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/red", (796, 266, 196, 151), CONFIG)
+    # ---------------------red car sequence---------------------
+    ## Define hyperparameters
+    CONFIG = Config(length_for_prediction=8, 
+                    pad_pixels=3, 
+                    step_size_pixels=1, 
+                    pad_scale=0.004, 
+                    step_size_scale=0.002, 
+                    ncc_threshold=0.97, 
+                    color_threshold=0.8,
+                    weight=0.8) 
+    ## Initialize the tracker for red car sequence
+    Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/red", (796, 266, 196, 151), CONFIG)
     
-    # # Initialize logger for red sequence
-    # logger = TrackingLogger(CONFIG, "red")
+    # Initialize logger for red sequence
+    logger = TrackingLogger(CONFIG, "red")
     
-    # # Initialize search space visualizer
-    # visualizer = SearchSpaceVisualizer(CONFIG, "Red Car Tracking - Search Space")
+    # Initialize search space visualizer
+    visualizer = SearchSpaceVisualizer(CONFIG, "Red Car Tracking - Search Space")
     
-    # # Initialize trajectory tracking
-    # trajectory_points = []
-    # # Add initial point from first kernel
-    # x0, y0, w0, h0 = Current_Kernel.bbox
-    # trajectory_points.append((x0 + w0//2, y0 + h0//2))
+    # Initialize GIF generator
+    gif_generator = GifGenerator()
     
-    # # Start reading images and match searching
-    # for current_img_path in img_paths[1:]:
-    #     ## Get the current image
-    #     Current_Image = CurrentImage(cv2.imread(current_img_path))
-        
-    #     ## update the next best kernel
-    #     Best_Next_Kernel, best_score = update_next_kernel(Current_Image, Kernel_Buffer, CONFIG)
-        
-    #     ## Update search space visualization with frame information
-    #     visualizer.update_search_space(Current_Image, Kernel_Buffer, Best_Next_Kernel, best_score, 
-    #                                  os.path.basename(current_img_path))
-        
-    #     ## Update trajectory with bounding box center
-    #     x, y, w, h = Best_Next_Kernel.bbox
-    #     center_x, center_y = x + w//2, y + h//2
-    #     trajectory_points.append((center_x, center_y))
-        
-    #     ## Log frame data
-    #     logger.log_frame(os.path.basename(current_img_path), best_score, Best_Next_Kernel.bbox)
-        
-    #     ## Print messages
-    #     print(f"Processing {os.path.basename(current_img_path)}: Best Score = {best_score:.4f}")
-        
-    #     ## Visualization with trajectory (OpenCV window)
-    #     should_exit = visualization(Current_Image, Best_Next_Kernel, best_score, trajectory_points)
-    #     if should_exit:
-    #         break
+    # Initialize trajectory tracking
+    trajectory_points = []
+    # Add initial point from first kernel
+    x0, y0, w0, h0 = Current_Kernel.bbox
+    trajectory_points.append((x0 + w0//2, y0 + h0//2))
     
-    # # Save log before exiting
-    # logger.save_log()
+    # Start reading images and match searching
+    for current_img_path in img_paths[1:]:
+        ## Get the current image
+        Current_Image = CurrentImage(cv2.imread(current_img_path))
+        
+        ## update the next best kernel
+        Best_Next_Kernel, best_score = update_next_kernel(Current_Image, Kernel_Buffer, CONFIG)
+        
+        ## Update search space visualization with frame information
+        search_fig = visualizer.update_search_space(Current_Image, Kernel_Buffer, Best_Next_Kernel, best_score, 
+                                                   os.path.basename(current_img_path))
+        
+        ## Update trajectory with bounding box center
+        x, y, w, h = Best_Next_Kernel.bbox
+        center_x, center_y = x + w//2, y + h//2
+        trajectory_points.append((center_x, center_y))
+        
+        ## Log frame data
+        logger.log_frame(os.path.basename(current_img_path), best_score, Best_Next_Kernel.bbox)
+        
+        ## Print messages
+        print(f"Processing {os.path.basename(current_img_path)}: Best Score = {best_score:.4f}")
+        
+        ## Visualization with trajectory (OpenCV window) and collect frame for GIF
+        should_exit, tracking_frame = visualization(Current_Image, Best_Next_Kernel, best_score, trajectory_points)
     
-    # # Clear windows
-    # cv2.destroyAllWindows()
-    # plt.close('all')
+        ## Add frames to GIF generator
+        gif_generator.add_tracking_frame(tracking_frame)
+        gif_generator.add_search_space_frame(search_fig)
+    
+        if should_exit:
+            break
+    
+    # Save log before exiting
+    logger.save_log()
+    
+    # Generate GIF animations (fast playback: 50ms per frame)
+    print("Generating GIF animations...")
+    gif_generator.save_gifs(sequence_type="red", duration=50)
+    
+    # Clear windows
+    cv2.destroyAllWindows()
+    plt.close('all')
         
         
     

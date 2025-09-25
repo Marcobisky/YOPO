@@ -35,6 +35,14 @@ python minimal_main.py
 
 ## Results
 
+![](gifs/tracking_blue.gif)
+
+![](gifs/tracking_red.gif)
+
+![](gifs/search_space_blue.gif)
+
+![](gifs/search_space_red.gif)
+
 ![](bbox_area_analysis.png)
 
 ![](best_score_analysis.png)
@@ -44,10 +52,10 @@ python minimal_main.py
 
 ### Classes
 
-- `CurrentImage()`: All read 
-    - `CurrentKernel()`
+- `CurrentImage()`: All read images and kernels
+    - `CurrentKernel()`: Specifically for kernels
 
-- `KernelBuffer()`
+- `KernelBuffer()`: Store all kernels history
 
 ## Some Notes
 
