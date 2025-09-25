@@ -11,15 +11,45 @@ conda env create -f environment.yml
 conda activate yopo
 ```
 
+### Delete Environment
+
+Do this to undo any change you made for building this project:
+
+```bash
+conda activate base
+conda env remove -n yopo
+```
+
 ## Run
 
 ```bash
 python main.py
+python plot.py
 ```
 
-## Some Notes
+There is also another file without any plot information, which is better to read:
 
-### Code Structure
+```bash
+python minimal_main.py
+```
+
+## Results
+
+![](bbox_area_analysis.png)
+
+![](best_score_analysis.png)
+
+
+## Code Structure
+
+### Classes
+
+- `CurrentImage()`: All read 
+    - `CurrentKernel()`
+
+- `KernelBuffer()`
+
+## Some Notes
 
 ### 变量规范:
 
