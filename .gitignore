@@ -3,3 +3,4 @@
 __pycache__
 # main_backup.py
 logs
+*.py
