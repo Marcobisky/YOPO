@@ -4,10 +4,11 @@
 
 ## Environment Setup
 
-Create and activate the conda environment:
+On M2-chip MacOS or Ubuntu 22.04, create and activate the conda environment:
+
 ```bash
 conda env create -f environment.yml
-conda activate image-processing-lab1
+conda activate yopo
 ```
 
 ## Run

@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import os
 from glob import glob
+import json
+from datetime import datetime
 
 
 def _extract_patch(Image, bbox):
@@ -122,6 +124,59 @@ class Config:
         self.color_threshold = color_threshold
         self.weight = weight # Moving average weight
 
+class TrackingLogger:
+    # Logger for tracking results and parameters
+    def __init__(self, config, sequence_type):
+        self.config = config
+        self.sequence_type = sequence_type  # "blue" or "red"
+        self.data = {
+            "config": self._config_to_dict(),
+            "sequence_type": sequence_type,
+            "frames": []
+        }
+        self.log_filename = self._generate_log_filename()
+        
+    def _config_to_dict(self):
+        # Convert config object to dictionary for JSON serialization
+        return {
+            "length_for_prediction": self.config.length_for_prediction,
+            "pad_pixels": self.config.pad_pixels,
+            "step_size_pixels": self.config.step_size_pixels,
+            "pad_scale": self.config.pad_scale,
+            "step_size_scale": self.config.step_size_scale,
+            "ncc_threshold": self.config.ncc_threshold,
+            "color_threshold": self.config.color_threshold,
+            "weight": self.config.weight
+        }
+    
+    def _generate_log_filename(self):
+        # Generate log filename with current date and sequence type
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"logs/{timestamp}_{self.sequence_type}.json"
+    
+    def log_frame(self, frame_name, best_score, best_kernel_bbox):
+        # Log data for a single frame
+        x, y, w, h = best_kernel_bbox
+        area = w * h
+        
+        frame_data = {
+            "frame_name": frame_name,
+            "best_score": best_score,
+            "bbox_x": x,
+            "bbox_y": y,
+            "bbox_width": w,
+            "bbox_height": h,
+            "bbox_area": area
+        }
+        self.data["frames"].append(frame_data)
+    
+    def save_log(self):
+        # Save all logged data to JSON file
+        os.makedirs(os.path.dirname(self.log_filename), exist_ok=True)
+        with open(self.log_filename, 'w') as f:
+            json.dump(self.data, f, indent=2)
+        print(f"Log saved to {self.log_filename}")
+
 
 def initialize_tracker(image_folder, init_bbox, Config):
     img_paths = sorted(glob(os.path.join(image_folder, "cars_*.jpg")))
@@ -167,7 +222,7 @@ def update_next_kernel(Current_Image, Kernel_Buffer, Config):
     
     return Best_Next_Kernel, best_score
 
-def visualization(Current_Image, Best_Kernel, score):
+def visualization(Current_Image, Best_Kernel, score, trajectory_points=None):
     frame = Current_Image.image_content_GRB.copy()
     x, y, w, h = Best_Kernel.bbox
     
@@ -177,6 +232,23 @@ def visualization(Current_Image, Best_Kernel, score):
     # Add score text
     cv2.putText(frame, f"{score:.2f}", (x, y - 5),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    
+    # Draw trajectory if points are provided
+    if trajectory_points and len(trajectory_points) > 1:
+        # Convert trajectory points to numpy array for drawing
+        points = np.array(trajectory_points, dtype=np.int32)
+        
+        # Draw trajectory line
+        for i in range(1, len(points)):
+            cv2.line(frame, tuple(points[i-1]), tuple(points[i]), (255, 0, 0), 2)
+        
+        # Draw trajectory points
+        for point in points:
+            cv2.circle(frame, tuple(point), 3, (0, 0, 255), -1)
+        
+        # Highlight current position
+        current_center = (x + w//2, y + h//2)
+        cv2.circle(frame, current_center, 5, (255, 255, 0), -1)
     
     # Show now
     cv2.imshow("Tracking", frame)
@@ -191,18 +263,28 @@ def visualization(Current_Image, Best_Kernel, score):
 
 
 if __name__ == "__main__":
-    ## Define hyperparameters
-    CONFIG = Config(length_for_prediction=8, 
-                    pad_pixels=3, 
-                    step_size_pixels=1, 
-                    pad_scale=0.004, 
-                    step_size_scale=0.002, 
-                    ncc_threshold=0.95, 
-                    color_threshold=0.8,
-                    weight=0.2)
+    
+    # ## Define hyperparameters
+    # CONFIG = Config(length_for_prediction=8, 
+    #                 pad_pixels=3, 
+    #                 step_size_pixels=1, 
+    #                 pad_scale=0.004, 
+    #                 step_size_scale=0.002, 
+    #                 ncc_threshold=0.95, 
+    #                 color_threshold=0.8,
+    #                 weight=0.2)
     
     # ## Initialize the tracker for blue car sequence
     # Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/blue", (672, 255, 168, 132), CONFIG)
+
+    # # Initialize logger for blue sequence
+    # logger = TrackingLogger(CONFIG, "blue")
+    
+    # # Initialize trajectory tracking
+    # trajectory_points = []
+    # # Add initial point from first kernel
+    # x0, y0, w0, h0 = Current_Kernel.bbox
+    # trajectory_points.append((x0 + w0//2, y0 + h0//2))
 
     # # Start reading images and match searching
     # for current_img_path in img_paths[1:]:
@@ -212,13 +294,24 @@ if __name__ == "__main__":
     #     ## update the next best kernel
     #     Best_Next_Kernel, best_score = update_next_kernel(Current_Image, Kernel_Buffer, CONFIG)
         
+    #     ## Update trajectory with bounding box center
+    #     x, y, w, h = Best_Next_Kernel.bbox
+    #     center_x, center_y = x + w//2, y + h//2
+    #     trajectory_points.append((center_x, center_y))
+        
+    #     ## Log frame data
+    #     logger.log_frame(os.path.basename(current_img_path), best_score, Best_Next_Kernel.bbox)
+        
     #     ## Print messages
     #     print(f"Processing {os.path.basename(current_img_path)}: Best Score = {best_score:.4f}")
         
-    #     ## Visualization
-    #     should_exit = visualization(Current_Image, Best_Next_Kernel, best_score)
+    #     ## Visualization with trajectory
+    #     should_exit = visualization(Current_Image, Best_Next_Kernel, best_score, trajectory_points)
     #     if should_exit:
     #         break
+    
+    # # Save log before exiting
+    # logger.save_log()
     
     # # Clear windows
     # cv2.destroyAllWindows()
@@ -232,13 +325,22 @@ if __name__ == "__main__":
                     step_size_pixels=1, 
                     pad_scale=0.004, 
                     step_size_scale=0.002, 
-                    ncc_threshold=0.97, 
+                    ncc_threshold=0.978, 
                     color_threshold=0.8,
                     weight=0.8) 
     ## Initialize the tracker for red car sequence
     Current_Kernel, Kernel_Buffer, img_paths = initialize_tracker("./sequences/red", (796, 266, 196, 151), CONFIG)
     
-   # Start reading images and match searching
+    # Initialize logger for red sequence
+    logger = TrackingLogger(CONFIG, "red")
+    
+    # Initialize trajectory tracking
+    trajectory_points = []
+    # Add initial point from first kernel
+    x0, y0, w0, h0 = Current_Kernel.bbox
+    trajectory_points.append((x0 + w0//2, y0 + h0//2))
+    
+    # Start reading images and match searching
     for current_img_path in img_paths[1:]:
         ## Get the current image
         Current_Image = CurrentImage(cv2.imread(current_img_path))
@@ -246,13 +348,24 @@ if __name__ == "__main__":
         ## update the next best kernel
         Best_Next_Kernel, best_score = update_next_kernel(Current_Image, Kernel_Buffer, CONFIG)
         
+        ## Update trajectory with bounding box center
+        x, y, w, h = Best_Next_Kernel.bbox
+        center_x, center_y = x + w//2, y + h//2
+        trajectory_points.append((center_x, center_y))
+        
+        ## Log frame data
+        logger.log_frame(os.path.basename(current_img_path), best_score, Best_Next_Kernel.bbox)
+        
         ## Print messages
         print(f"Processing {os.path.basename(current_img_path)}: Best Score = {best_score:.4f}")
         
-        ## Visualization
-        should_exit = visualization(Current_Image, Best_Next_Kernel, best_score)
+        ## Visualization with trajectory
+        should_exit = visualization(Current_Image, Best_Next_Kernel, best_score, trajectory_points)
         if should_exit:
             break
+    
+    # Save log before exiting
+    logger.save_log()
     
     # Clear windows
     cv2.destroyAllWindows() 
