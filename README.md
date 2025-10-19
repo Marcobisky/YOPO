@@ -32,6 +32,7 @@ Use docker to run this project on Windows:
 On M2-chip MacOS or Ubuntu 22.04, the process is much simpler:
 
 ```bash
+git clone https://github.com/Marcobisky/YOPO.git
 conda env create -f environment.yml
 conda activate yopo
 python main.py # If you want to run the complete program
