@@ -2,6 +2,16 @@ FROM continuumio/miniconda3:latest
 
 WORKDIR /app
 
+# Install system libraries required by OpenCV and GUI
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy environment file and create conda environment
 COPY environment.yml .
 RUN conda env create -f environment.yml && conda clean -a -y

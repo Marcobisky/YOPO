@@ -24,8 +24,14 @@ echo.
 set /p READY="Press Enter when VcXsrv is running..."
 
 echo.
-echo Step 2: Building Docker image...
+echo Step 2: Building Docker image (this may take several minutes)...
 docker build -t yopo-tracker .
+
+if errorlevel 1 (
+    echo ERROR: Docker build failed!
+    pause
+    exit /b 1
+)
 
 echo.
 echo Step 3: Running YOPO Tracker...
