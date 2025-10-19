@@ -1,6 +1,6 @@
 *.txt
 .DS_Store
 __pycache__
-# main_backup.py
+main_backup.py
 logs
-*.py
+# *.py
