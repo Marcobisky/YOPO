@@ -1,5 +1,7 @@
 # YOPO -- You Only Pick Once
 
+> A brief introduction to this project is [here](https://marcobisky.github.io/posts/yopo/).
+
 > This is the source code for the first project of DIP (Digital Image Processing) course in UESTC, UofG.
 
 ## Environment Setup
